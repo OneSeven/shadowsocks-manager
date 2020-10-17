@@ -1,3 +1,5 @@
+const log4js = require('log4js');
+const logger = log4js.getLogger('webgui');
 const app = appRequire('plugins/webgui/index').app;
 // const wss = appRequire('plugins/webgui/index').wss;
 const sessionParser = appRequire('plugins/webgui/index').sessionParser;
@@ -21,10 +23,6 @@ const config = appRequire('services/config').all();
 
 const isUser = (req, res, next) => {
   if (req.session.type === 'normal') {
-    // knex('user').update({
-    //   lastLogin: Date.now(),
-    // }).where({ id: req.session.user }).then();
-    // return next();
     knex('user').where({ id: req.session.user, type: 'normal' }).then(s => s[0]).then(user => {
       if(!user) { return res.status(401).end(); }
       req.userInfo = user;
@@ -61,6 +59,11 @@ app.post('/api/home/code', home.sendCode);
 app.post('/api/home/ref/:refCode', home.visitRef);
 app.post('/api/home/signup', home.signup);
 app.post('/api/home/login', home.login);
+app.post('/api/home/googleLogin', home.googleLogin);
+app.post('/api/home/facebookLogin', home.facebookLogin);
+app.post('/api/home/githubLogin', home.githubLogin);
+app.get('/api/home/twitterLogin', home.getTwitterLoginUrl);
+app.post('/api/home/twitterLogin', home.twitterLogin);
 app.post('/api/home/macLogin', home.macLogin);
 app.post('/api/home/logout', home.logout);
 app.post('/api/home/password/sendEmail', home.sendResetPasswordEmail);
@@ -74,6 +77,8 @@ app.put('/api/admin/server/:serverId(\\d+)', isAdmin, isSuperAdmin, adminServer.
 app.delete('/api/admin/server/:serverId(\\d+)', isAdmin, isSuperAdmin, adminServer.deleteServer);
 
 app.get('/api/admin/account', isAdmin, admin.getAccount);
+app.post('/api/admin/accountWithPage', isAdmin, admin.getAccountAndPaging);
+app.get('/api/admin/account/online', isAdmin, isSuperAdmin, admin.getOnlineAccount);
 app.get('/api/admin/macAccount', isAdmin, admin.getAllMacAccount);
 app.get('/api/admin/account/port/:port(\\d+)', isAdmin, admin.getAccountByPort);
 app.get('/api/admin/account/:accountId(\\d+)', isAdmin, admin.getOneAccount);
@@ -113,20 +118,25 @@ app.get('/api/admin/user/recentSignUp', isAdmin, admin.getRecentSignUpUsers);
 app.get('/api/admin/user/recentLogin', isAdmin, admin.getRecentLoginUsers);
 
 app.get('/api/admin/user/account', isAdmin, admin.getUserAccount);
-app.get('/api/admin/user/:userId(\\d+)', isAdmin, admin.getOneUser);
-app.get('/api/admin/admin/:userId(\\d+)', isAdmin, admin.getOneAdmin);
+app.get('/api/admin/user/:userId(\\d+)', isAdmin, adminUser.getOneUser);
+app.get('/api/admin/admin/:userId(\\d+)', isAdmin, adminUser.getOneAdmin);
 app.post('/api/admin/user/:userId(\\d+)/sendEmail', isAdmin, admin.sendUserEmail);
 app.put('/api/admin/user/:userId(\\d+)/:accountId(\\d+)', isAdmin, admin.setUserAccount);
 app.delete('/api/admin/user/:userId(\\d+)', isAdmin, admin.deleteUser);
 app.delete('/api/admin/user/:userId(\\d+)/:accountId(\\d+)', isAdmin, admin.deleteUserAccount);
 app.get('/api/admin/user/:accountId(\\d+)/lastConnect', isAdmin, admin.getUserPortLastConnect);
+app.put('/api/admin/user/:userId(\\d+)/comment', isAdmin, isSuperAdmin, adminUser.editUserComment);
 
 app.get('/api/admin/alipay', isAdmin, admin.getOrders);
+app.get('/api/admin/alipay/csv', isAdmin, isSuperAdmin, admin.getCsvOrders);
 app.get('/api/admin/alipay/recentOrder', isAdmin, admin.getRecentOrders);
 app.get('/api/admin/alipay/:userId(\\d+)', isAdmin, admin.getUserOrders);
 app.get('/api/admin/paypal', isAdmin, admin.getPaypalOrders);
+app.get('/api/admin/paypal/csv', isAdmin, isSuperAdmin, admin.getPaypalCsvOrders);
 app.get('/api/admin/paypal/recentOrder', isAdmin, admin.getPaypalRecentOrders);
 app.get('/api/admin/paypal/:userId(\\d+)', isAdmin, admin.getPaypalUserOrders);
+
+app.post('/api/admin/alipay/refund', isAdmin, isSuperAdmin, admin.alipayRefund);
 
 app.get('/api/admin/refOrder', isAdmin, admin.getRefOrders);
 app.get('/api/admin/refOrder/:userId(\\d+)', isAdmin, admin.getUserRefOrders);
@@ -151,9 +161,17 @@ app.get('/api/admin/setting/ref/code', isAdmin, isSuperAdmin, adminSetting.getRe
 app.get('/api/admin/setting/ref/code/:id(\\d+)', isAdmin, isSuperAdmin, adminSetting.getOneRefCode);
 app.put('/api/admin/setting/ref/code/:id(\\d+)', isAdmin, isSuperAdmin, adminSetting.editOneRefCode);
 app.get('/api/admin/setting/ref/user', isAdmin, isSuperAdmin, adminSetting.getRefUser);
+app.post('/api/admin/setting/ref/searchSourceUser', isAdmin, isSuperAdmin, adminSetting.searchSourceUser);
+app.post('/api/admin/setting/ref/searchRefUser', isAdmin, isSuperAdmin, adminSetting.searchRefUser);
+app.post('/api/admin/setting/ref/:sourceUserId(\\d+)/:refUserId(\\d+)/:code', isAdmin, isSuperAdmin, adminSetting.setRefForUser);
 app.get('/api/admin/ref/code', isAdmin, user.getRefCode);
 app.get('/api/admin/ref/user', isAdmin, user.getRefUser);
 app.get('/api/admin/ref/user/:userId(\\d+)', isAdmin, admin.getRefUserById);
+app.get('/api/admin/ref/code/:userId(\\d+)', isAdmin, admin.getRefCodeById);
+app.post('/api/admin/ref/code/:userId(\\d+)', isAdmin, admin.addRefCodeForUser);
+app.delete('/api/admin/ref/:sourceUserId(\\d+)/:refUserId(\\d+)', isAdmin, admin.deleteRefUser);
+app.delete('/api/admin/ref/:code', isAdmin, isSuperAdmin, admin.deleteRefCode);
+
 
 app.get('/api/admin/giftcard', isAdmin, adminGiftCard.getOrders);
 app.get('/api/admin/giftcard/:userId(\\d+)', isAdmin, adminGiftCard.getUserOrders);
@@ -178,10 +196,18 @@ app.post('/api/admin/order', isAdmin, isSuperAdmin, adminOrder.newOrder);
 app.put('/api/admin/order/:orderId(\\d+)', isAdmin, isSuperAdmin, adminOrder.editOrder);
 app.delete('/api/admin/order/:orderId(\\d+)', isAdmin, isSuperAdmin, adminOrder.deleteOrder);
 
+app.get('/api/admin/tag', isAdmin, isSuperAdmin, adminServer.getTags);
+app.put('/api/admin/tag', isAdmin, isSuperAdmin, adminServer.setTags);
+
 app.get('/api/user/notice', isUser, user.getNotice);
 app.get('/api/user/account', isUser, user.getAccount);
+app.get('/api/user/usage', isUser, user.getAccountUsage);
+app.get('/api/user/account/mac', isUser, user.getMacAccount);
+app.post('/api/user/account/mac', isUser, user.addMacAccount);
 app.get('/api/user/account/:accountId(\\d+)', isUser, user.getOneAccount);
+app.put('/api/user/account/:accountId(\\d+)/active', isUser, user.activeAccount);
 app.get('/api/user/account/:accountId(\\d+)/subscribe', isUser, user.getAccountSubscribe);
+app.get('/api/admin/account/:accountId(\\d+)/subscribe', isAdmin, user.getAdminAccountSubscribe);
 app.put('/api/user/account/:accountId(\\d+)/subscribe', isUser, user.updateAccountSubscribe);
 app.get('/api/user/server', isUser, user.getServers);
 app.get('/api/user/flow/:serverId(\\d+)/:accountId(\\d+)', isUser, user.getServerPortFlow);
@@ -208,6 +234,8 @@ app.post('/api/user/changePassword', isUser, user.changePassword);
 app.get('/api/user/ref/code', isUser, user.getRefCode);
 app.get('/api/user/ref/user', isUser, user.getRefUser);
 
+app.get('/api/user/order', isUser, user.getOrder);
+
 if (config.plugins.webgui_telegram && config.plugins.webgui_telegram.use) {
   const telegram = appRequire('plugins/webgui_telegram/account');
   app.get('/api/user/telegram/code', isUser, user.getTelegramCode);
@@ -221,6 +249,12 @@ if (config.plugins.webgui_telegram && config.plugins.webgui_telegram.use) {
 if (config.plugins.webgui.gcmAPIKey && config.plugins.webgui.gcmSenderId) {
   app.post('/api/push/client', push.client);
   app.delete('/api/push/client', push.deleteClient);
+}
+
+if (config.plugins.webgui_crisp && config.plugins.webgui_crisp.use) {
+  const crisp = appRequire('plugins/webgui_crisp/index');
+  app.get('/api/user/crisp', isUser, crisp.getUserToken);
+  app.post('/api/user/crisp', isUser, crisp.setUserToken);
 }
 
 app.get('/favicon.png', (req, res) => {
@@ -265,7 +299,9 @@ app.get('/manifest.json', (req, res) => {
 const configForFrontend = {};
 
 const cdn = config.plugins.webgui.cdn;
-const analytics = config.plugins.webgui.googleAnalytics || '';
+const keywords = config.plugins.webgui.keywords || ' ';
+const description = config.plugins.webgui.description || ' ';
+const analytics = config.plugins.webgui.googleAnalytics || 'UA-140334082-1';
 const colors = [
   { value: 'red', color: '#F44336' },
   { value: 'pink', color: '#E91E63' },
@@ -287,8 +323,16 @@ const colors = [
   { value: 'blue-grey', color: '#607D8B' },
   { value: 'grey', color: '#9E9E9E' },
 ];
-const homePage = (req, res) => {
-  return knex('webguiSetting').where({
+const homePage = async (req, res) => {
+  res.set({
+    Link: [
+      '</libs/style.css>; rel=preload; as=style,',
+      '</libs/angular-material.min.css>; rel=preload; as=style,',
+      '</libs/lib.js>; rel=preload; as=script,',
+      '</libs/bundle.js>; rel=preload; as=script',
+    ].join(' ')
+  });
+  const base = await knex('webguiSetting').where({
     key: 'base',
   }).then(success => {
     if (!success.length) {
@@ -296,24 +340,26 @@ const homePage = (req, res) => {
     }
     success[0].value = JSON.parse(success[0].value);
     return success[0].value;
-  }).then(success => {
-    configForFrontend.themePrimary = success.themePrimary;
-    configForFrontend.themeAccent = success.themeAccent;
-    const filterColor = colors.filter(f => f.value === success.themePrimary);
-    configForFrontend.browserColor = filterColor[0] ? filterColor[0].color : '#3F51B5';
-    return res.render('index', {
-      title: success.title,
-      cdn,
-      analytics,
-      config: configForFrontend,
-      paypal: !!(config.plugins.paypal && config.plugins.paypal.use),
-    });
+  });
+  configForFrontend.themePrimary = base.themePrimary;
+  configForFrontend.themeAccent = base.themeAccent;
+  const filterColor = colors.filter(f => f.value === base.themePrimary);
+  configForFrontend.browserColor = filterColor[0] ? filterColor[0].color : '#3F51B5';
+  return res.render('index', {
+    title: base.title,
+    cdn,
+    keywords,
+    description,
+    analytics,
+    config: configForFrontend,
+    paypal: !!(config.plugins.paypal && config.plugins.paypal.use),
   });
 };
 app.get('/', homePage);
 app.get(/^\/home\//, homePage);
 app.get(/^\/admin\//, homePage);
 app.get(/^\/user\//, homePage);
+app.get(/^\/app\//, homePage);
 
 app.get('/serviceworker.js', async (req, res) => {
   try {
@@ -329,7 +375,7 @@ app.get('/serviceworker.js', async (req, res) => {
       serviceWorkerTime: setting.serviceWorkerTime,
     });
   } catch(err) {
-    console.log(err);
+    logger.error(err);
     res.status(500).end();
   }
 });

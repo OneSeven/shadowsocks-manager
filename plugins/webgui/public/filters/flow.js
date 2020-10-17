@@ -30,9 +30,11 @@ app.filter('flowStr2Num', function() {
   const T = 1000 * 1000 * 1000 * 1000;
   const P = 1000 * 1000 * 1000 * 1000 * 1000;
   return function(input) {
-    if(Number.isInteger(+input)) {
+    if(!input) {
+      return 0;
+    } else if(Number.isInteger(+input)) {
       return +input;
-    } else if(input.match(/^\d{1,}.?\d{0,}[Kk]$/)) {
+    }else if(input.match(/^\d{1,}.?\d{0,}[Kk]$/)) {
       return +input.substr(0, input.length - 1) * K;
     } else if(input.match(/^\d{1,}.?\d{0,}[Mm]$/)) {
       return +input.substr(0, input.length - 1) * M;
@@ -54,7 +56,7 @@ app.filter('flowNum2Str', function() {
   const P = 1000 * 1000 * 1000 * 1000 * 1000;
   return function(input) {
     if (input < K) {
-      return input;
+      return input.toString();
     } else if (input < M) {
       return +(input / K).toFixed(1) + 'K';
     } else if (input < G) {
@@ -64,7 +66,7 @@ app.filter('flowNum2Str', function() {
     } else if (input < P) {
       return +(input / T).toFixed(3) + 'T';
     } else {
-      return input;
+      return input.toString();
     }
   };
 });

@@ -44,18 +44,49 @@ const fixRefTime = async () => {
   });
 };
 
-
 const createTable = async () => {
   const exist = await knex.schema.hasTable(tableName);
   if(exist) {
+    const hasAutoRemoveDelay = await knex.schema.hasColumn(tableName, 'autoRemoveDelay');
+    if(!hasAutoRemoveDelay) {
+      await knex.schema.table(tableName, function(table) {
+        table.bigInteger('autoRemoveDelay').defaultTo(0);
+      });
+    }
+    const hasPortRange = await knex.schema.hasColumn(tableName, 'portRange');
+    if(!hasPortRange) {
+      await knex.schema.table(tableName, function(table) {
+        table.string('portRange').defaultTo('0');
+      });
+    }
+    const hasShortComment = await knex.schema.hasColumn(tableName, 'shortComment');
+    if(!hasShortComment) {
+      await knex.schema.table(tableName, function(table) {
+        table.string('shortComment').defaultTo('');
+      });
+    }
+    const hasBaseId = await knex.schema.hasColumn(tableName, 'baseId');
+    if(!hasBaseId) {
+      await knex.schema.table(tableName, function(table) {
+        table.integer('baseId').defaultTo(0);
+      });
+    }
+    const hasActive = await knex.schema.hasColumn(tableName, 'active');
+    if(!hasActive) {
+      await knex.schema.table(tableName, function(table) {
+        table.integer('active').defaultTo(1);
+      });
+    }
     await addDefaultOrder();
     await fixRefTime();
     return;
   }
-  await knex.schema.createTableIfNotExists(tableName, function(table) {
+  await knex.schema.createTable(tableName, function(table) {
     table.increments('id').primary();
+    table.integer('baseId').defaultTo(0);
     table.string('name');
-    table.string('comment').defaultTo('');
+    table.string('shortComment').defaultTo('');
+    table.string('comment', 16384).defaultTo('');
     table.integer('type');
     table.integer('cycle');
     table.float('alipay');
@@ -64,8 +95,11 @@ const createTable = async () => {
     table.bigInteger('refTime');
     table.string('server');
     table.integer('autoRemove').defaultTo(0);
+    table.bigInteger('autoRemoveDelay').defaultTo(0);
+    table.string('portRange').defaultTo('0');
     table.integer('multiServerFlow').defaultTo(0);
     table.integer('changeOrderType').defaultTo(0);
+    table.integer('active').defaultTo(1);
   });
   await addDefaultOrder();
   return;

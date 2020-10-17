@@ -64,7 +64,7 @@ const createOrder = async (user, account, orderId) => {
       orderType: orderId,
       amount: orderInfo.paypal + '',
       user,
-      account: (account !== 'undefined' && account) ? account : null,
+      account: (account !== 'undefined' && account !== 'null' && account) ? account : null,
       status: 'created',
       createTime: Date.now(),
       expireTime: Date.now() + 2 * 60 * 60 * 1000,
@@ -178,7 +178,7 @@ cron.minute(async () => {
   for(const order of orders) {
     await scanOrder(order);
   }
-}, 1);
+}, 'CheckPaypalOrder', 1);
 
 const orderList = async (options = {}) => {
   const where = {};
@@ -214,8 +214,10 @@ const orderListAndPaging = async (options = {}) => {
   const sort = options.sort || 'paypal.createTime_desc';
   const page = options.page || 1;
   const pageSize = options.pageSize || 20;
+  const start = options.start ? moment(options.start).hour(0).minute(0).second(0).millisecond(0).toDate().getTime() : moment(0).toDate().getTime();
+  const end = options.end ? moment(options.end).hour(23).minute(59).second(59).millisecond(999).toDate().getTime() : moment().toDate().getTime();
 
-  let count = knex('paypal').select();
+  let count = knex('paypal').select().whereBetween('paypal.createTime', [start, end]);
   let orders = knex('paypal').select([
     'paypal.orderId',
     'paypal.orderType',
@@ -229,7 +231,8 @@ const orderListAndPaging = async (options = {}) => {
     'paypal.expireTime',
   ])
   .leftJoin('user', 'user.id', 'paypal.user')
-  .leftJoin('account_plugin', 'account_plugin.id', 'paypal.account');
+  .leftJoin('account_plugin', 'account_plugin.id', 'paypal.account')
+  .whereBetween('paypal.createTime', [start, end]);
 
   if(filter.length) {
     count = count.whereIn('paypal.status', filter);
@@ -259,10 +262,30 @@ const orderListAndPaging = async (options = {}) => {
   };
 };
 
+const getUserFinishOrder = async userId => {
+  let orders = await knex('paypal').select([
+    'orderId',
+    'amount',
+    'createTime',
+  ]).where({
+    user: userId,
+  }).orderBy('createTime', 'DESC');
+  orders = orders.map(order => {
+    return {
+      orderId: order.orderId,
+      type: 'Paypal',
+      amount: order.amount,
+      createTime: order.createTime,
+    };
+  });
+  return orders;
+};
+
 exports.orderListAndPaging = orderListAndPaging;
 exports.orderList = orderList;
+exports.getUserFinishOrder = getUserFinishOrder;
 
 cron.minute(() => {
   if(!config.plugins.paypal || !config.plugins.paypal.use) { return; }
   knex('paypal').delete().where({ status: 'created' }).whereBetween('expireTime', [0, Date.now() - 1 * 24 * 3600 * 1000]).then();
-}, 30);
+}, 'DeletePaypalOrder', 30);
